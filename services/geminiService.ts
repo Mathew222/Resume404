@@ -59,6 +59,28 @@ Your job is to **DESTROY** the CV provided below. No polite constructive feedbac
 - Make it hurt.
 `;
 
+const TEMPLATE_STYLE_REFERENCE = `
+WILLIAM DAVIS
+Experienced Project Manager | IT | Leadership | Cost Management
++1-541-754-3010 • Email • linkedin.com • New York, NY, USA
+
+Summary
+With over 12 years of experience in project management...
+
+Skills
+Project Management • Leadership • Cost Management...
+
+Experience
+IBM                                          New York, NY, USA
+Senior IT Project Manager                    2018 - 2023
+• Oversaw a $2M project portfolio...
+• Initiated and successfully implemented...
+
+Education
+Massachusetts Institute of Technology        Cambridge, MA, USA
+Bachelor's Degree in Computer Science        2012 - 2013
+`;
+
 export const streamRoast = async (
   content: string,
   mimeType: string,
@@ -109,38 +131,88 @@ export const streamRoast = async (
 export interface FixedResumeData {
   latex: string;
   pdfContent: {
-    header: string;
-    sections: {
+    header: {
+      name: string;
       title: string;
-      body: string;
+      contact: string; // e.g. "Phone • Email • Location"
+    };
+    summary: string;
+    skills: string; // List separated by bullets or commas
+    experience: {
+      company: string;
+      location: string;
+      role: string;
+      date: string;
+      bullets: string[];
     }[];
+    education: {
+      school: string;
+      location: string;
+      degree: string;
+      date: string;
+    }[];
+    languages?: string;
   };
 }
 
 export const fixResume = async (
-  originalContent: string
+  originalContent: string,
+  mimeType: string
 ): Promise<FixedResumeData> => {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    // Construct prompt
-    const prompt = `
-      You are an expert Resume Writer and ATS Optimization specialist. 
-      I need you to rewrite the following resume content into a PERFECT, professional, ATS-friendly format.
-      
-      RETURN ONLY A VALID JSON OBJECT (no markdown blocks around it) with two fields:
-      1. "latex": A full, compilable LaTeX code for the resume. Use the 'article' class. Use standard packages (geometry, enumitem, hyperref). Make it clean, professional, and minimal. No photos.
-      2. "pdfContent": A structured object for generating a plain PDF. It must have:
-         - "header": String containing Name, Email, Phone, LinkedIn, Location (formatted with pipes |).
-         - "sections": An array of objects, each with "title" (e.g., "Professional Summary", "Experience", "Skills") and "body" (The content for that section. Use bullet points starting with "• " for experience items).
+    const systemPrompt = `
+      You are an expert Resume Writer. Your goal is to rewrite the user's resume to EXACTLY match the structure and style of the "William Davis" template provided below.
 
-      Resume Content to Rewrite:
-      ${originalContent.substring(0, 10000)}
+      **TEMPLATE REFERENCE (Do not copy this content, only the structure):**
+      ${TEMPLATE_STYLE_REFERENCE}
+      
+      **CRITICAL RULES:**
+      1. **NO HALLUCINATIONS**: Do NOT add any skills, companies, or degrees not present in the user's source content.
+      2. **FORMAT**: 
+         - **Header**: Name (Center), Title (Center), Contact Line (Center).
+         - **Summary**: A single professional paragraph.
+         - **Skills**: A single block of skills separated by ' • '.
+         - **Experience**: Cleanly separated Company, Location, Role, Date. Strong action verbs for bullets.
+         - **Education**: School, Location, Degree, Date.
+      3. **DETAILS**: Keep the user's phone/email if available, otherwise leave placeholders like "[Phone]".
+
+      RETURN ONLY A VALID JSON OBJECT (no markdown blocks) with this specific schema:
+      {
+        "latex": "Full compilable LaTeX code using 'article' class, centered header, etc.",
+        "pdfContent": {
+          "header": { "name": "", "title": "", "contact": "" },
+          "summary": "",
+          "skills": "",
+          "experience": [ { "company": "", "location": "", "role": "", "date": "", "bullets": [""] } ],
+          "education": [ { "school": "", "location": "", "degree": "", "date": "" } ],
+          "languages": ""
+        }
+      }
     `;
+
+    let contents: any;
+
+    if (mimeType === 'application/pdf') {
+      contents = {
+        parts: [
+          {
+            inlineData: {
+              mimeType: 'application/pdf',
+              data: originalContent
+            }
+          },
+          { text: systemPrompt }
+        ]
+      };
+    } else {
+      contents = `${systemPrompt}\n\nUSER SOURCE CONTENT:\n${originalContent.substring(0, 25000)}`;
+    }
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: prompt,
+      contents: contents,
       config: {
         responseMimeType: 'application/json'
       }
@@ -149,7 +221,6 @@ export const fixResume = async (
     const text = response.text;
     if (!text) throw new Error("No response from AI");
 
-    // Clean potential markdown code blocks if the model ignores the instruction (just in case)
     const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleanJson) as FixedResumeData;
 
