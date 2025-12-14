@@ -34,8 +34,6 @@ const generateHash = (str: string): string => {
 function App() {
   const [loadingState, setLoadingState] = useState<LoadingState>(LoadingState.IDLE);
   const [roastContent, setRoastContent] = useState('');
-  const [originalContent, setOriginalContent] = useState(''); // Store original text for resume fixing
-  const [originalMimeType, setOriginalMimeType] = useState(''); // Store mimeType for PDF handling
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MESSAGES[0]);
   const [roastCount, setRoastCount] = useState<number>(0);
   const [isCachedResult, setIsCachedResult] = useState(false);
@@ -71,8 +69,6 @@ function App() {
   }, [loadingState]);
 
   const handleRoast = useCallback(async (content: string, mimeType: string) => {
-    setOriginalContent(content); // Always update original content first
-    setOriginalMimeType(mimeType);
     
     // 1. Check Cache First (Free)
     const contentHash = generateHash(content);
@@ -130,8 +126,6 @@ function App() {
   const handleReset = () => {
     setLoadingState(LoadingState.IDLE);
     setRoastContent('');
-    setOriginalContent('');
-    setOriginalMimeType('');
     setIsCachedResult(false);
   };
 
@@ -211,8 +205,6 @@ function App() {
             )}
             <RoastOutput 
               roast={roastContent}
-              originalContent={originalContent} 
-              originalMimeType={originalMimeType}
               loadingState={loadingState} 
               onReset={handleReset} 
             />

@@ -1,14 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { jsPDF } from 'jspdf';
 import { LoadingState } from '../types';
-import { Trash2, MessageSquare, Skull, RefreshCw, Volume2, Square, Tv, TrendingUp, Gem, Hammer, CheckCircle, Download, FileCode, FileText } from 'lucide-react';
-import { fixResume, FixedResumeData } from '../services/geminiService';
+import { Trash2, MessageSquare, Skull, RefreshCw, Volume2, Square, Tv, TrendingUp } from 'lucide-react';
 
 interface RoastOutputProps {
   roast: string;
-  originalContent: string;
-  originalMimeType: string;
   loadingState: LoadingState;
   onReset: () => void;
 }
@@ -25,16 +21,12 @@ const MEME_IMAGES = [
   "https://i.imgflip.com/1otk96.jpg", // Distracted boyfriend
 ];
 
-const RoastOutput: React.FC<RoastOutputProps> = ({ roast, originalContent, originalMimeType, loadingState, onReset }) => {
+const RoastOutput: React.FC<RoastOutputProps> = ({ roast, loadingState, onReset }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [randomMeme, setRandomMeme] = useState<string>("");
   const [atsScore, setAtsScore] = useState<number>(0);
   
-  // Fix Resume States
-  const [isFixing, setIsFixing] = useState(false);
-  const [fixedData, setFixedData] = useState<FixedResumeData | null>(null);
-
   useEffect(() => {
     // Select a random meme reaction on mount
     const meme = MEME_IMAGES[Math.floor(Math.random() * MEME_IMAGES.length)];
@@ -121,197 +113,6 @@ const RoastOutput: React.FC<RoastOutputProps> = ({ roast, originalContent, origi
     if (score < 30) return 'bg-alert';
     if (score < 70) return 'bg-yellow-500';
     return 'bg-green-500';
-  };
-
-  // --- REPAIR LOGIC ---
-  const handleFixResume = async () => {
-    setIsFixing(true);
-    try {
-      const data = await fixResume(originalContent, originalMimeType); 
-      setFixedData(data);
-      generateAndDownloadPDF(data);
-    } catch (e) {
-      console.error(e);
-      alert("Failed to build resume. The damage was too great.");
-    } finally {
-      setIsFixing(false);
-    }
-  };
-
-  const generateAndDownloadPDF = (data: FixedResumeData) => {
-    const doc = new jsPDF();
-    const pageWidth = 210;
-    const margin = 15;
-    const contentWidth = pageWidth - (margin * 2);
-    let y = 20;
-
-    // Helper to add new page if needed
-    const checkPageBreak = (spaceNeeded: number) => {
-      if (y + spaceNeeded > 280) {
-        doc.addPage();
-        y = 20;
-      }
-    };
-
-    // --- HEADER ---
-    doc.setFont("times", "bold");
-    doc.setFontSize(24);
-    doc.text(data.pdfContent.header.name.toUpperCase(), pageWidth / 2, y, { align: 'center' });
-    y += 8;
-
-    if (data.pdfContent.header.title) {
-        doc.setFontSize(14);
-        doc.setTextColor(80, 80, 80);
-        doc.text(data.pdfContent.header.title, pageWidth / 2, y, { align: 'center' });
-        y += 7;
-    }
-
-    doc.setFont("times", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0);
-    doc.text(data.pdfContent.header.contact, pageWidth / 2, y, { align: 'center' });
-    y += 12;
-
-    // --- SECTIONS ---
-    
-    // Summary
-    if (data.pdfContent.summary) {
-        checkPageBreak(30);
-        doc.setFont("times", "bold");
-        doc.setFontSize(14);
-        doc.text("Summary", pageWidth / 2, y, { align: 'center' });
-        y += 2;
-        doc.setLineWidth(0.5);
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 6;
-
-        doc.setFont("times", "normal");
-        doc.setFontSize(10);
-        const lines = doc.splitTextToSize(data.pdfContent.summary, contentWidth);
-        doc.text(lines, margin, y);
-        y += (lines.length * 5) + 8;
-    }
-
-    // Skills
-    if (data.pdfContent.skills) {
-        checkPageBreak(30);
-        doc.setFont("times", "bold");
-        doc.setFontSize(14);
-        doc.text("Skills", pageWidth / 2, y, { align: 'center' });
-        y += 2;
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 6;
-
-        doc.setFont("times", "normal");
-        doc.setFontSize(10);
-        const lines = doc.splitTextToSize(data.pdfContent.skills, contentWidth);
-        doc.text(lines, pageWidth / 2, y, { align: 'center' });
-        y += (lines.length * 5) + 8;
-    }
-
-    // Experience
-    if (data.pdfContent.experience && data.pdfContent.experience.length > 0) {
-        checkPageBreak(30);
-        doc.setFont("times", "bold");
-        doc.setFontSize(14);
-        doc.text("Experience", pageWidth / 2, y, { align: 'center' });
-        y += 2;
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 8;
-
-        data.pdfContent.experience.forEach(exp => {
-            checkPageBreak(25 + (exp.bullets.length * 5));
-            
-            // Company & Location
-            doc.setFont("times", "bold");
-            doc.setFontSize(12);
-            doc.text(exp.company, margin, y);
-            
-            doc.setFont("times", "normal");
-            doc.text(exp.location, pageWidth - margin, y, { align: 'right' });
-            y += 5;
-
-            // Role & Date
-            doc.setFont("times", "italic");
-            doc.text(exp.role, margin, y);
-            
-            doc.setFont("times", "normal");
-            doc.text(exp.date, pageWidth - margin, y, { align: 'right' });
-            y += 6;
-
-            // Bullets
-            doc.setFontSize(10);
-            exp.bullets.forEach(bullet => {
-                const bulletText = `• ${bullet}`;
-                const bulletLines = doc.splitTextToSize(bulletText, contentWidth - 5);
-                doc.text(bulletLines, margin + 5, y);
-                y += (bulletLines.length * 5);
-            });
-            y += 4;
-        });
-        y += 4;
-    }
-
-    // Education
-    if (data.pdfContent.education && data.pdfContent.education.length > 0) {
-        checkPageBreak(30);
-        doc.setFont("times", "bold");
-        doc.setFontSize(14);
-        doc.text("Education", pageWidth / 2, y, { align: 'center' });
-        y += 2;
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 8;
-
-        data.pdfContent.education.forEach(edu => {
-            checkPageBreak(15);
-            
-            // School & Location
-            doc.setFont("times", "bold");
-            doc.setFontSize(12);
-            doc.text(edu.school, margin, y);
-            
-            doc.setFont("times", "normal");
-            doc.text(edu.location, pageWidth - margin, y, { align: 'right' });
-            y += 5;
-
-            // Degree & Date
-            doc.setFont("times", "italic");
-            doc.text(edu.degree, margin, y);
-            
-            doc.setFont("times", "normal");
-            doc.text(edu.date, pageWidth - margin, y, { align: 'right' });
-            y += 8;
-        });
-    }
-
-    // Languages (Optional)
-    if (data.pdfContent.languages) {
-        checkPageBreak(20);
-        y += 4;
-        doc.setFont("times", "bold");
-        doc.setFontSize(14);
-        doc.text("Languages", pageWidth / 2, y, { align: 'center' });
-        y += 2;
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 6;
-        
-        doc.setFont("times", "normal");
-        doc.setFontSize(10);
-        doc.text(data.pdfContent.languages, pageWidth / 2, y, { align: 'center' });
-    }
-
-    doc.save("Fixed_Resume_WilliamDavis_Style.pdf");
-  };
-
-  const downloadLatex = () => {
-    if (!fixedData) return;
-    const blob = new Blob([fixedData.latex], { type: 'text/plain' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = "resume_overleaf_source.tex";
-    a.click();
-    window.URL.revokeObjectURL(url);
   };
 
   return (
@@ -467,73 +268,6 @@ const RoastOutput: React.FC<RoastOutputProps> = ({ roast, originalContent, origi
                 {roast}
               </ReactMarkdown>
           </div>
-        </div>
-
-        {/* --- PREMIUM UPSELL SECTION (Now Functional) --- */}
-        <div className="relative z-20 -mt-8 mx-2 md:mx-12 mb-12">
-           <div className="bg-[#121212] border-4 border-yellow-400 p-6 md:p-8 shadow-[8px_8px_0px_0px_rgba(250,204,21,1)] text-white relative overflow-hidden group">
-              {/* Shine effect */}
-              <div className="absolute top-0 -left-[100%] w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12 group-hover:animate-[shimmer_2s_infinite]"></div>
-              
-              <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 md:gap-8">
-                 <div className="text-center md:text-left">
-                    <div className="inline-flex items-center gap-2 bg-yellow-400 text-black px-3 py-1 font-bold text-xs uppercase tracking-widest mb-3">
-                       <Gem size={14} /> Premium Rescue
-                    </div>
-                    <h3 className="font-display font-black text-2xl md:text-4xl uppercase leading-none mb-2 text-yellow-400">
-                       Stop Being Unemployed
-                    </h3>
-                    <p className="font-mono text-gray-400 text-sm md:text-base max-w-lg">
-                       Get a professional, ATS-optimized rewrite of your resume. Includes PDF and LaTeX (Overleaf) source code.
-                    </p>
-                    <ul className="mt-4 space-y-2 font-mono text-xs md:text-sm text-gray-300 text-left inline-block">
-                       <li className="flex items-center gap-2"><CheckCircle size={14} className="text-yellow-400" /> Auto-Generated PDF</li>
-                       <li className="flex items-center gap-2"><CheckCircle size={14} className="text-yellow-400" /> Overleaf LaTeX Source</li>
-                       <li className="flex items-center gap-2"><CheckCircle size={14} className="text-yellow-400" /> 100% Aura Increase</li>
-                    </ul>
-                 </div>
-                 
-                 <div className="flex flex-col gap-3 w-full md:w-auto shrink-0">
-                    {!fixedData ? (
-                        <button 
-                          onClick={handleFixResume}
-                          disabled={isFixing}
-                          className="bg-yellow-400 text-black font-display font-black text-xl px-8 py-4 uppercase tracking-widest hover:bg-white transition-colors border-4 border-transparent hover:border-yellow-400 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-wait"
-                        >
-                          {isFixing ? (
-                            <>
-                               <RefreshCw className="animate-spin" size={24} /> Building...
-                            </>
-                          ) : (
-                            <>
-                               <Hammer size={24} />
-                               Fix My Resume ($49)
-                            </>
-                          )}
-                        </button>
-                    ) : (
-                        <div className="flex flex-col gap-2 animate-fade-in-up">
-                            <button 
-                              onClick={() => generateAndDownloadPDF(fixedData)}
-                              className="bg-green-500 text-white font-display font-black text-sm px-4 py-2 uppercase tracking-widest hover:bg-green-600 transition-colors border-2 border-transparent flex items-center justify-center gap-2"
-                            >
-                               <FileText size={16} /> Download PDF
-                            </button>
-                            <button 
-                              onClick={downloadLatex}
-                              className="bg-gray-800 text-white font-display font-black text-sm px-4 py-2 uppercase tracking-widest hover:bg-gray-700 transition-colors border-2 border-transparent flex items-center justify-center gap-2"
-                            >
-                               <FileCode size={16} /> Download LaTeX
-                            </button>
-                        </div>
-                    )}
-                    
-                    <p className="text-center text-[10px] font-mono uppercase text-gray-500">
-                       {fixedData ? "Your career is saved." : "Money back guarantee (if you survive)"}
-                    </p>
-                 </div>
-              </div>
-           </div>
         </div>
         
         {/* Footer Actions */}
